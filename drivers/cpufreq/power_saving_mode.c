@@ -38,6 +38,7 @@ static atomic_t driver_enabled __read_mostly = ATOMIC_INIT(1);
 static atomic_t low_battery __read_mostly = ATOMIC_INIT(0);
 
 static bool system_suspended __read_mostly = false;
+static bool notifier_registered = false;
 static bool governor_stored = false;
 
 static unsigned int low_battery_threshold __read_mostly =
@@ -279,8 +280,16 @@ put_psy:
 
 static int start_battery_monitoring(void)
 {
-	notifiers.psy.notifier_call = psy_changed;
-	return power_supply_reg_notifier(&notifiers.psy);
+    int ret = 0;
+    
+    if (!notifier_registered) 
+    {
+        notifiers.psy.notifier_call = psy_changed;
+        ret = power_supply_reg_notifier(&notifiers.psy);
+        if (ret == 0)
+            notifier_registered = true;
+    }
+    return ret;
 }
 
 static void probe_power_supply(struct work_struct *work)
@@ -364,7 +373,11 @@ static ssize_t driver_enabled_store(struct kobject *kobj,
 			atomic_set(&driver_enabled, 0);
 
 			/* unregister notifier when disabling */
-			power_supply_unreg_notifier(&notifiers.psy);
+            if (notifier_registered) 
+            {
+		        power_supply_unreg_notifier(&notifiers.psy);
+                notifier_registered = false;
+            }
 
 			/* restore original governor */
 			if (atomic_read(&low_battery)) 
@@ -376,17 +389,21 @@ static ssize_t driver_enabled_store(struct kobject *kobj,
 			}
 		} else {
 			pr_info("enabled\n");
+            atomic_set(&driver_enabled, 1);
 
 			/* re-register notifier when enabling */
-			ret = power_supply_reg_notifier(&notifiers.psy);
-			if (ret) 
+            if (!notifier_registered) 
             {
-				pr_err("failed to register power supply notifier: %d\n", ret);
-				return ret;
-			}
-            atomic_set(&driver_enabled, 1);
-		}
-	}
+			    ret = power_supply_reg_notifier(&notifiers.psy);
+			    if (ret) 
+                {
+			    	pr_err("failed to register power supply notifier: %d\n", ret);
+			    	return ret;
+			    }
+                notifier_registered = true;
+		    }
+	    }
+    }
 	return count;
 }
 
@@ -545,7 +562,12 @@ static void __exit psm_exit(void)
     /* Ensure synchronization */
     mutex_lock(&governor_mutex);
     unregister_pm_notifier(&notifiers.pm);
-    power_supply_unreg_notifier(&notifiers.psy);
+    
+    if (notifier_registered)
+    {
+        power_supply_unreg_notifier(&notifiers.psy);
+        notifier_registered = false;
+    }
 
     if (works.wq) 
     {
