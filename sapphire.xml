@@ -21,7 +21,7 @@
     <linkfile src="static_analysis" dest="build/static_analysis" />
   </project>
 
-  <project path="common" name="device_xiaomi_unified-kernel" remote="common-repo" revision="android13-5.15-lts" >
+  <project path="common" name="device_xiaomi_sapphire_kernel" remote="common-repo" revision="android13-5.15-lts" >
    <linkfile src="." dest=".source_date_epoch_dir" />
   </project>
 
